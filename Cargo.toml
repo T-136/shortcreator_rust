@@ -19,6 +19,9 @@ tracing = "0.1.36"
 migration = {path = "migration"}
 dotenv = "0.15.0"
 itertools = "0.10.3"
+actix-files = "0.6.2"
+actix-multipart = "0.4.0"
+futures-util = "0.3.23"
 
 
 [dependencies.sea-orm]

@@ -1,7 +1,9 @@
 use actix_cors::Cors;
+use actix_files::NamedFile;
+use actix_multipart::Multipart;
 use actix_web::guard::Options;
 use actix_web::http::header::ContentType;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, Result};
+use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer, Responder, Result};
 use dotenv;
 use migration::{Migrator, MigratorTrait};
 use sea_orm::entity::prelude::*;
@@ -12,6 +14,9 @@ use serde_json;
 use std::env;
 use tracing;
 use tracing_subscriber;
+
+use futures_util::TryStreamExt as _;
+use std::io::Write;
 
 // use entities::clip;
 mod entities;
@@ -113,6 +118,57 @@ async fn show_all(db: web::Data<DatabaseConnection>) -> HttpResponse {
     }
 }
 
+#[derive(Deserialize)]
+struct VideoHeader {
+    username: String,
+}
+
+#[derive(Deserialize)]
+struct VideoBody {
+    username: String,
+}
+
+#[post("/sendStreetviewVideo")]
+async fn send_streetview_video(
+    mut payload: Multipart,
+    db: web::Data<DatabaseConnection>,
+) -> Result<String> {
+    async fn index(mut body: web::Payload) -> actix_web::Result<String> {
+        // for demonstration only; in a normal case use the `Bytes` extractor
+        // collect payload stream into a bytes object
+        let mut bytes = web::BytesMut::new();
+        while let Some(item) = body.next().await {
+            bytes.extend_from_slice(&item?);
+        }
+    
+        Ok(format!("Request Body Bytes:\n{:?}", bytes))
+    }
+
+
+
+//     while let Some(mut field) = payload.try_next().await? {
+//         // A multipart/form-data stream has to contain `content_disposition`
+//         let content_disposition = field.content_disposition();
+//         // filename = videoFolder + "/streetviewvideo-" + str(clip_id)
+//         dotenv::dotenv().ok();
+//         let folder_path = env::var("VIDEO_FOLDER").expect("no videofolder path");
+//         let file_id = content_disposition.get_filename().unwrap();
+//         let filepath = format!("{folder_path}/streetviewvideo-{file_id}");
+
+//         // File::create is blocking operation, use threadpool
+//         let mut f = web::block(|| std::fs::File::create(filepath)).await??;
+
+//         // Field in turn is stream of *Bytes* object
+//         while let Some(chunk) = field.try_next().await? {
+//             // filesystem operations are blocking, we have to use threadpool
+//             f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
+//         }
+//     }
+//     Ok(HttpResponse::Ok().into())
+}
+
+// #[get("/getStreetviewVideo/{clip_id}.mp4")]
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     tracing_subscriber::fmt()
@@ -138,36 +194,9 @@ async fn main() -> std::io::Result<()> {
             .service(write_edit)
             .service(delete)
             .service(show_all)
+            .service(send_streetview_video)
     })
     .bind(("127.0.0.1", 8000))?
     .run()
     .await
-}
-
-
-#[cfg(feature = "mock")]
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use actix_web::{
-        http::{self, header::ContentType},
-        test,
-    };
-     use sea_orm::{
-        entity::prelude::*, entity::*, tests_cfg::*,
-        DatabaseBackend, MockDatabase, Transaction,
-    };
-
-    #[actix_rt::test]
-    async fn create() {
-        let db = MockDatabase::new(DatabaseBackend::Postgres);
-        let app = test::init_service(App::new().app_data(web::Data::new(db.clone())).service(create_new_clip)).await;
-        let req = test::TestRequest::get().uri("/create_new_clip").to_request();
-        let resp = test::call_service(&app, req).await;
-        println!("{:?}", resp);
-        assert!(resp.status().is_success());
-        println("{:?}",db.into_transaction_log());
-        println!("hi")
-    }
 }
