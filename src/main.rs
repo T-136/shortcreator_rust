@@ -183,7 +183,7 @@ async fn main() -> std::io::Result<()> {
         .init();
 
     dotenv::dotenv().ok();
-    let db_url = env::var("DATABASE").expect("no db path");
+    let db_url = env::var("DATABASE_URL").expect("no db path");
 
     let db: DatabaseConnection = Database::connect(&db_url).await.unwrap();
     Migrator::up(&db, None).await.unwrap();
