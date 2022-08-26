@@ -1,4 +1,8 @@
 use actix_cors::Cors;
+use std::io::BufReader;
+use std::io::prelude::*;
+use actix_files::NamedFile;
+use std::path::PathBuf;
 
 use futures_util::stream::StreamExt as _;
 
@@ -7,7 +11,7 @@ use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer, Responder,
 use dotenv;
 use migration::{Migrator, MigratorTrait};
 use sea_orm::entity::prelude::*;
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, ActiveValue};
 use sea_orm::{Database, Set};
 use serde::Deserialize;
 use serde_json;
@@ -15,6 +19,7 @@ use std::env;
 use std::fs::File;
 use tracing;
 use tracing_subscriber;
+use futures::{future::ok, stream::once};
 
 use std::io::Write;
 
@@ -82,7 +87,8 @@ impl clip::Model {
         active.latlong = Set(self.latlong.to_owned());
         active.start = Set(self.start.to_owned());
         active.stop = Set(self.stop.to_owned());
-        active.streetview_video = Set(self.streetview_video.to_owned());
+        // streetview_video is set in send_streetview_video fn
+        // active.streetview_video = Set(self.streetview_video.to_owned());
         active.is_renderd = Set(self.is_renderd.to_owned());
         active.is_uploaded_yt = Set(self.is_uploaded_yt.to_owned());
         active.is_uploaded_tik_tok = Set(self.is_uploaded_tik_tok.to_owned());
@@ -152,14 +158,27 @@ async fn send_streetview_video(
         .unwrap();
     let filepath = format!("{folder_path}/streetviewvideo-{file_id}");
 
+    let clip = Clip::find_by_id(file_id.parse::<i32>().unwrap()).one(&**db).await.unwrap().unwrap();
+
+    let mut active: clip::ActiveModel = clip.clone().into();
+    active.streetview_video = Set(Some(filepath.clone()));
+    active.update(&**db).await.unwrap();
+
+
     // TODO: maybe blocking and needs async writing
-    let mut f = File::create(filepath).unwrap();
+    let mut f = File::create(filepath).unwrap() ;
     f.write_all(&bytes).unwrap();
 
     Ok(HttpResponse::Ok().body("stored clip"))
 }
 
-// #[get("/getStreetviewVideo/{clip_id}.mp4")]
+async fn get_streetview_video( req: actix_web::HttpRequest) -> Result<NamedFile> {
+    let clip_id  = req.match_info().query("filename");
+    let folder_path = env::var("VIDEO_FOLDER").expect("no videofolder path");
+    let filename = format!("{folder_path}/streetviewvideo-{clip_id}");
+
+    Ok(NamedFile::open(filename)?)
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -187,7 +206,7 @@ async fn main() -> std::io::Result<()> {
             .service(delete)
             .service(show_all)
             .service(send_streetview_video)
-            .service(fsda)
+            .route("/getStreetviewVideo/{filename:.*}.mp4", web::get().to(get_streetview_video))
     })
     .bind(("127.0.0.1", 8000))?
     .run()
