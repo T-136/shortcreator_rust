@@ -1,0 +1,34 @@
+[package]
+name = "shortcreator_rust"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [".", "migration"]
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-cors = "0.6.2"
+actix-web = "4.1.0"
+serde = {version = "1.0.144", features = ["derive"]}
+serde_json = "1.0.85"
+tracing-subscriber = "0.3.15"
+tracing = "0.1.36"
+migration = {path = "migration"}
+dotenv = "0.15.0"
+itertools = "0.10.3"
+
+
+[dependencies.sea-orm]
+version = "^0.9.2"
+features = [
+  # "mock",
+  "debug-print",
+#  "runtime-actix-native-tls",
+#   "sqlx-mysql",
+  "sqlx-postgres",
+  # "sqlx-sqlite",
+]
+
