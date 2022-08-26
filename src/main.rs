@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde_json;
 use std::env;
 use std::fs::File;
+use std::fs::remove_file;
 use tracing;
 use tracing_subscriber;
 use futures::{future::ok, stream::once};
@@ -54,9 +55,12 @@ async fn delete(clip_id: web::Path<i32>, db: web::Data<DatabaseConnection>) -> H
     let clip_res = Clip::find_by_id(clip_id.into_inner())
         .one(&db.clone())
         .await;
-
+   
     if let Ok(clip) = clip_res {
+
         let clip: clip::ActiveModel = clip.unwrap().into();
+        let video_file_path = clip.streetview_video.clone();
+        remove_file(video_file_path.unwrap().unwrap());
         clip.delete(db).await;
         HttpResponse::Ok().body("deleted")
     } else {
@@ -124,15 +128,6 @@ async fn show_all(db: web::Data<DatabaseConnection>) -> HttpResponse {
     }
 }
 
-#[derive(Deserialize)]
-struct VideoHeader {
-    username: String,
-}
-
-#[derive(Deserialize)]
-struct VideoBody {
-    username: String,
-}
 
 #[post("/sendStreetviewVideo")]
 async fn send_streetview_video(
