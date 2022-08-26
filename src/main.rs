@@ -1,7 +1,7 @@
 use actix_cors::Cors;
-use actix_files::NamedFile;
-use actix_multipart::Multipart;
-use actix_web::guard::Options;
+
+use futures_util::stream::StreamExt as _;
+
 use actix_web::http::header::ContentType;
 use actix_web::{get, post, web, App, Error, HttpResponse, HttpServer, Responder, Result};
 use dotenv;
@@ -9,13 +9,13 @@ use migration::{Migrator, MigratorTrait};
 use sea_orm::entity::prelude::*;
 use sea_orm::DatabaseConnection;
 use sea_orm::{Database, Set};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json;
 use std::env;
+use std::fs::File;
 use tracing;
 use tracing_subscriber;
 
-use futures_util::TryStreamExt as _;
 use std::io::Write;
 
 // use entities::clip;
@@ -130,41 +130,33 @@ struct VideoBody {
 
 #[post("/sendStreetviewVideo")]
 async fn send_streetview_video(
-    mut payload: Multipart,
+    // mut content: http::header::ContentDisposition ,
     db: web::Data<DatabaseConnection>,
-) -> Result<String> {
-    async fn index(mut body: web::Payload) -> actix_web::Result<String> {
-        // for demonstration only; in a normal case use the `Bytes` extractor
-        // collect payload stream into a bytes object
-        let mut bytes = web::BytesMut::new();
-        while let Some(item) = body.next().await {
-            bytes.extend_from_slice(&item?);
-        }
-    
-        Ok(format!("Request Body Bytes:\n{:?}", bytes))
+    mut body: web::Payload,
+    req: actix_web::HttpRequest,
+) -> Result<HttpResponse, Error> {
+    // for demonstration only; in a normal case use the `Bytes` extractor
+    // collect payload stream into a bytes object
+    // println!("{:?}", content);
+    let mut bytes = web::BytesMut::new();
+    while let Some(item) = body.next().await {
+        bytes.extend_from_slice(&item?);
     }
 
+    let folder_path = env::var("VIDEO_FOLDER").expect("no videofolder path");
+    let file_id = req
+        .headers()
+        .get("Content-Disposition")
+        .unwrap()
+        .to_str()
+        .unwrap();
+    let filepath = format!("{folder_path}/streetviewvideo-{file_id}");
 
+    // TODO: maybe blocking and needs async writing
+    let mut f = File::create(filepath).unwrap();
+    f.write_all(&bytes).unwrap();
 
-//     while let Some(mut field) = payload.try_next().await? {
-//         // A multipart/form-data stream has to contain `content_disposition`
-//         let content_disposition = field.content_disposition();
-//         // filename = videoFolder + "/streetviewvideo-" + str(clip_id)
-//         dotenv::dotenv().ok();
-//         let folder_path = env::var("VIDEO_FOLDER").expect("no videofolder path");
-//         let file_id = content_disposition.get_filename().unwrap();
-//         let filepath = format!("{folder_path}/streetviewvideo-{file_id}");
-
-//         // File::create is blocking operation, use threadpool
-//         let mut f = web::block(|| std::fs::File::create(filepath)).await??;
-
-//         // Field in turn is stream of *Bytes* object
-//         while let Some(chunk) = field.try_next().await? {
-//             // filesystem operations are blocking, we have to use threadpool
-//             f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
-//         }
-//     }
-//     Ok(HttpResponse::Ok().into())
+    Ok(HttpResponse::Ok().body("stored clip"))
 }
 
 // #[get("/getStreetviewVideo/{clip_id}.mp4")]
@@ -195,6 +187,7 @@ async fn main() -> std::io::Result<()> {
             .service(delete)
             .service(show_all)
             .service(send_streetview_video)
+            .service(fsda)
     })
     .bind(("127.0.0.1", 8000))?
     .run()
