@@ -159,7 +159,7 @@ mod tests {
         DatabaseBackend, MockDatabase, Transaction,
     };
 
-    #[actix_web::test]
+    #[actix_rt::test]
     async fn create() {
         let db = MockDatabase::new(DatabaseBackend::Postgres);
         let app = test::init_service(App::new().app_data(web::Data::new(db.clone())).service(create_new_clip)).await;
